@@ -1,4 +1,4 @@
-use std::{ops::Range, u8};
+use std::ops::Range;
 
 pub struct Grid {
     pub rows: usize,
@@ -15,8 +15,8 @@ pub struct Cell {
 
 const LINK_NORTH: u8 = 0x01;
 const LINK_SOUTH: u8 = 0x02;
-const LINK_EAST: u8 = 0x03;
-const LINK_WEST: u8 = 0x04;
+const LINK_EAST: u8 = 0x04;
+const LINK_WEST: u8 = 0x08;
 
 impl Grid {
     pub fn new(rows: usize, columns: usize) -> Grid {
@@ -78,11 +78,22 @@ impl Grid {
         self.is_linked(cell, LINK_NORTH)
     }
 
+    pub fn is_linked_south(&self, cell: &Cell) -> bool {
+        self.is_linked(cell, LINK_SOUTH)
+    }
+
+    pub fn is_linked_east(&self, cell: &Cell) -> bool {
+        self.is_linked(cell, LINK_EAST)
+    }
+
     pub fn is_linked_west(&self, cell: &Cell) -> bool {
         self.is_linked(cell, LINK_WEST)
     }
 
     pub fn north(&self, cell: &Cell) -> Option<Cell> {
+        if cell.row == 0 {
+            return None;
+        }
         self.cell(cell.row - 1, cell.column)
     }
 
@@ -95,6 +106,9 @@ impl Grid {
     }
 
     pub fn west(&self, cell: &Cell) -> Option<Cell> {
+        if cell.column == 0 {
+            return None;
+        }
         self.cell(cell.row, cell.column - 1)
     }
 
@@ -111,46 +125,32 @@ impl Grid {
 
     pub fn iter(&self) -> CellsIterator {
         CellsIterator {
-            grid: self,
+            rows_size: self.columns,
             range: (0..self.size),
             index: 0,
-        }
-    }
-
-    pub fn iter_row(&self, row: usize) -> CellsIterator {
-        let range = (row * self.columns)..((row + 1) * self.columns);
-        let start = range.start;
-        CellsIterator {
-            grid: self,
-            range,
-            index: start,
         }
     }
 
     pub fn to_index(&self, cell: &Cell) -> usize {
         cell.row * self.columns + cell.column
     }
-
-    pub fn to_cell(&self, index: usize) -> Cell {
-        Cell {
-            row: index / self.columns,
-            column: index % self.columns,
-        }
-    }
 }
 
-pub struct CellsIterator<'a> {
-    grid: &'a Grid,
+pub struct CellsIterator {
+    rows_size: usize,
     range: Range<usize>,
     index: usize,
 }
 
-impl<'a> Iterator for CellsIterator<'a> {
+impl Iterator for CellsIterator {
     type Item = Cell;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.range.contains(&self.index) {
-            let cell = self.grid.to_cell(self.index);
+            let cell = Cell {
+                row: self.index / self.rows_size,
+                column: self.index % self.rows_size,
+            };
             self.index += 1;
             return Some(cell);
         }
