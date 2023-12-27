@@ -11,6 +11,8 @@ pub struct Grid {
 pub struct Cell {
     pub row: usize,
     pub column: usize,
+    limit_rows: usize,
+    limit_colums: usize,
 }
 
 const LINK_NORTH: u8 = 0x01;
@@ -36,38 +38,22 @@ impl Grid {
         let mut value_from = self.cells[index_from];
         let mut value_to = self.cells[index_to];
 
-        if self.is_north(from, to) {
+        if from.is_north(to) {
             value_from |= LINK_NORTH;
             value_to |= LINK_SOUTH;
-        } else if self.is_south(from, to) {
+        } else if from.is_south(to) {
             value_from |= LINK_SOUTH;
             value_to |= LINK_NORTH;
-        } else if self.is_east(from, to) {
+        } else if from.is_east(to) {
             value_from |= LINK_EAST;
             value_to |= LINK_WEST;
-        } else if self.is_west(from, to) {
+        } else if from.is_west(to) {
             value_from |= LINK_WEST;
             value_to |= LINK_EAST;
         }
 
         self.cells[index_from] = value_from;
         self.cells[index_to] = value_to;
-    }
-
-    fn is_north(&self, from: &Cell, to: &Cell) -> bool {
-        from.column == to.column && from.row > 0 && from.row - 1 == to.row
-    }
-
-    fn is_south(&self, from: &Cell, to: &Cell) -> bool {
-        from.column == to.column && from.row < self.rows && from.row + 1 == to.row
-    }
-
-    fn is_east(&self, from: &Cell, to: &Cell) -> bool {
-        from.row == to.row && from.column < self.columns && from.column + 1 == to.column
-    }
-
-    fn is_west(&self, from: &Cell, to: &Cell) -> bool {
-        from.row == to.row && from.column > 0 && from.column - 1 == to.column
     }
 
     fn is_linked(&self, cell: &Cell, value: u8) -> bool {
@@ -90,42 +76,10 @@ impl Grid {
         self.is_linked(cell, LINK_WEST)
     }
 
-    pub fn north(&self, cell: &Cell) -> Option<Cell> {
-        if cell.row == 0 {
-            return None;
-        }
-        self.cell(cell.row - 1, cell.column)
-    }
-
-    pub fn south(&self, cell: &Cell) -> Option<Cell> {
-        self.cell(cell.row + 1, cell.column)
-    }
-
-    pub fn east(&self, cell: &Cell) -> Option<Cell> {
-        self.cell(cell.row, cell.column + 1)
-    }
-
-    pub fn west(&self, cell: &Cell) -> Option<Cell> {
-        if cell.column == 0 {
-            return None;
-        }
-        self.cell(cell.row, cell.column - 1)
-    }
-
-    pub fn cell(&self, row: usize, column: usize) -> Option<Cell> {
-        if row >= self.rows {
-            return None;
-        }
-
-        if column >= self.columns {
-            return None;
-        }
-        Some(Cell { row, column })
-    }
-
     pub fn iter(&self) -> CellsIterator {
         CellsIterator {
-            rows_size: self.columns,
+            rows: self.rows,
+            columns: self.columns,
             range: (0..self.size),
             index: 0,
         }
@@ -136,8 +90,54 @@ impl Grid {
     }
 }
 
+impl Cell {
+    pub fn north(&self) -> Option<Cell> {
+        self.neighbor(self.row.checked_sub(1), Some(self.column))
+    }
+
+    pub fn south(&self) -> Option<Cell> {
+        self.neighbor(Some(self.row + 1), Some(self.column))
+    }
+
+    pub fn east(&self) -> Option<Cell> {
+        self.neighbor(Some(self.row), Some(self.column + 1))
+    }
+
+    pub fn west(&self) -> Option<Cell> {
+        self.neighbor(Some(self.row), self.column.checked_sub(1))
+    }
+
+    fn neighbor(&self, row: Option<usize>, column: Option<usize>) -> Option<Cell> {
+        row.filter(|n| *n < self.limit_rows)
+            .zip(column.filter(|n| *n < self.limit_colums))
+            .map(|s| Cell {
+                row: s.0,
+                column: s.1,
+                limit_rows: self.limit_rows,
+                limit_colums: self.limit_colums,
+            })
+    }
+
+    fn is_north(&self, to: &Cell) -> bool {
+        self.column == to.column && self.row > 0 && self.row - 1 == to.row
+    }
+
+    fn is_south(&self, to: &Cell) -> bool {
+        self.column == to.column && self.row + 1 == to.row
+    }
+
+    fn is_east(&self, to: &Cell) -> bool {
+        self.row == to.row && self.column + 1 == to.column
+    }
+
+    fn is_west(&self, to: &Cell) -> bool {
+        self.row == to.row && self.column > 0 && self.column - 1 == to.column
+    }
+}
+
 pub struct CellsIterator {
-    rows_size: usize,
+    rows: usize,
+    columns: usize,
     range: Range<usize>,
     index: usize,
 }
@@ -148,8 +148,10 @@ impl Iterator for CellsIterator {
     fn next(&mut self) -> Option<Self::Item> {
         if self.range.contains(&self.index) {
             let cell = Cell {
-                row: self.index / self.rows_size,
-                column: self.index % self.rows_size,
+                row: self.index / self.rows,
+                column: self.index % self.rows,
+                limit_rows: self.rows,
+                limit_colums: self.columns,
             };
             self.index += 1;
             return Some(cell);
